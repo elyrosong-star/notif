@@ -33,6 +33,10 @@ function create() {
     if (!url.startsWith(APP_URL) && !url.startsWith('file:')) e.preventDefault();
   });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // F12 ou Ctrl+Maj+I : console de diagnostic
+  win.webContents.on('before-input-event', (e, i) => {
+    if (i.type === 'keyDown' && (i.key === 'F12' || (i.control && i.shift && i.key.toLowerCase() === 'i'))) win.webContents.toggleDevTools();
+  });
   // F5 / Ctrl+R = recharger (récupère la dernière version du site)
   win.webContents.on('before-input-event', (e, i) => {
     if (i.type === 'keyDown' && (i.key === 'F5' || (i.control && i.key.toLowerCase() === 'r'))) {
