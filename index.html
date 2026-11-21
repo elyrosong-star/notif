@@ -115,7 +115,7 @@ const $=i=>document.getElementById(i);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const fmt=d=>new Date(d).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
 const LBL={teasing:"Teasing",pressing:"Pressing"};
-const native=m=>window.native&&window.native.mode(m);
+const nat=m=>window.native&&window.native.mode(m);
 if(!window.supabase){document.body.textContent="Connexion à internet requise.";throw 0}
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 let me=null,alertes=[],profs=[],modeles=[],ch=null,timer=null,ac=null;
@@ -142,7 +142,7 @@ function cleanup(){clearInterval(timer);if(ch){db.removeChannel(ch);ch=null}wind
 
 async function route(){
   const{data:{session}}=await db.auth.getSession();
-  if(!session){show("auth");native("login");return}
+  if(!session){show("auth");nat("login");return}
   const{data:p,error:pe}=await db.from("tp_profiles").select("*").eq("id",session.user.id).maybeSingle();
   if(!p){await db.auth.signOut();show("auth");$("err").textContent=pe?"Erreur Supabase : "+pe.message:"Aucun profil pour ce compte (id "+session.user.id+").";return}
   me=p;p.role==="admin"?startAdmin():startAgent();
@@ -150,7 +150,7 @@ async function route(){
 
 /* ---------- Agent ---------- */
 async function startAgent(){
-  show("agent");native("agent");
+  show("agent");nat("agent");
   $("aWho").textContent=me.nom;$("aModel").textContent="Aucun modèle assigné";
   if(me.modele_id){const{data}=await db.from("tp_modeles").select("nom").eq("id",me.modele_id).single();if(data)$("aModel").textContent=data.nom}
   $("fan").value=localStorage.getItem("fan")||"";
@@ -177,7 +177,7 @@ $("bT").onclick=()=>send("teasing");$("bP").onclick=()=>send("pressing");
 
 /* ---------- Admin ---------- */
 async function startAdmin(){
-  show("admin");native("admin");$("adWho").textContent=me.nom;
+  show("admin");nat("admin");$("adWho").textContent=me.nom;
   await loadAll();setTab(tab);
   ch=db.channel("tp").on("postgres_changes",{event:"*",schema:"public",table:"tp_alertes"},p=>{
     if(p.eventType==="INSERT"){beep(p.new.type);toast(LBL[p.new.type]+" · "+p.new.agent_nom+" → "+p.new.fan)}
@@ -271,8 +271,8 @@ $("newMod").onkeydown=e=>{if(e.key==="Enter")$("addMod").click()};
 $("fan").onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};
 
 try{if(window.native){
-  document.querySelectorAll(".pinb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const on=await native.pin();document.querySelectorAll(".pinb").forEach(x=>x.textContent=on?"Épinglé":"Épingler")}});
-  let big=false;$("sizeb").hidden=false;$("sizeb").onclick=()=>{big=!big;$("sizeb").textContent=big?"Réduire":"Agrandir";native.size()};
+  document.querySelectorAll(".pinb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const on=await window.native.pin();document.querySelectorAll(".pinb").forEach(x=>x.textContent=on?"Épinglé":"Épingler")}});
+  let big=false;$("sizeb").hidden=false;$("sizeb").onclick=()=>{big=!big;$("sizeb").textContent=big?"Réduire":"Agrandir";window.native.size()};
 }}catch(e){console.error(e)}
 window.addEventListener("error",e=>{if(["auth","agent","admin"].every(i=>$(i).hidden)){show("auth");$("err").textContent="Erreur : "+e.message}});
 setTimeout(()=>{if(["auth","agent","admin"].every(i=>$(i).hidden)){show("auth");$("err").textContent="Chargement trop long : vérifiez la connexion internet."}},6000);
