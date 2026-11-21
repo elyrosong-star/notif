@@ -143,8 +143,8 @@ function cleanup(){clearInterval(timer);if(ch){db.removeChannel(ch);ch=null}wind
 async function route(){
   const{data:{session}}=await db.auth.getSession();
   if(!session){show("auth");native("login");return}
-  const{data:p}=await db.from("tp_profiles").select("*").eq("id",session.user.id).single();
-  if(!p){await db.auth.signOut();show("auth");$("err").textContent="Profil introuvable : exécutez schema.sql dans Supabase.";return}
+  const{data:p,error:pe}=await db.from("tp_profiles").select("*").eq("id",session.user.id).maybeSingle();
+  if(!p){await db.auth.signOut();show("auth");$("err").textContent=pe?"Erreur Supabase : "+pe.message:"Aucun profil pour ce compte (id "+session.user.id+").";return}
   me=p;p.role==="admin"?startAdmin():startAgent();
 }
 
