@@ -270,11 +270,13 @@ $("addMod").onclick=async()=>{
 $("newMod").onkeydown=e=>{if(e.key==="Enter")$("addMod").click()};
 $("fan").onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};
 
-if(window.native){
+try{if(window.native){
   document.querySelectorAll(".pinb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const on=await native.pin();document.querySelectorAll(".pinb").forEach(x=>x.textContent=on?"Épinglé":"Épingler")}});
   let big=false;$("sizeb").hidden=false;$("sizeb").onclick=()=>{big=!big;$("sizeb").textContent=big?"Réduire":"Agrandir";native.size()};
-}
-route();
+}}catch(e){console.error(e)}
+window.addEventListener("error",e=>{if(["auth","agent","admin"].every(i=>$(i).hidden)){show("auth");$("err").textContent="Erreur : "+e.message}});
+setTimeout(()=>{if(["auth","agent","admin"].every(i=>$(i).hidden)){show("auth");$("err").textContent="Chargement trop long : vérifiez la connexion internet."}},6000);
+route().catch(e=>{show("auth");$("err").textContent="Erreur : "+e.message});
 </script>
 </body>
 </html>
