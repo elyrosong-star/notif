@@ -70,7 +70,7 @@ nav button.on{background:var(--accent);color:#fff;border-color:transparent}
 <section id="agent" hidden>
   <div class="top">
     <div><b id="aWho"></b><br><span id="aModel" class="tag m"></span></div>
-    <button class="ghost" id="aOut">Quitter</button>
+    <div><button class="ghost pinb" hidden>Épinglé</button> <button class="ghost" id="aOut">Quitter</button></div>
   </div>
   <label for="fan">Fan en discussion</label>
   <input id="fan" placeholder="Nom du fan…" autocomplete="off">
@@ -81,7 +81,7 @@ nav button.on{background:var(--accent);color:#fff;border-color:transparent}
 
 <!-- ESPACE ADMIN -->
 <section id="admin" hidden>
-  <div class="top"><b>Espace admin · <span id="adWho"></span></b><button class="ghost" id="adOut">Se déconnecter</button></div>
+  <div class="top"><b>Espace admin · <span id="adWho"></span></b><div><button class="ghost pinb" hidden>Épinglé</button> <button class="ghost" id="sizeb" hidden>Agrandir</button> <button class="ghost" id="adOut">Se déconnecter</button></div></div>
   <nav>
     <button data-t="notif">Notifications<span id="bN" class="badge"></span></button>
     <button data-t="agents">Agents</button>
@@ -270,6 +270,10 @@ $("addMod").onclick=async()=>{
 $("newMod").onkeydown=e=>{if(e.key==="Enter")$("addMod").click()};
 $("fan").onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};
 
+if(window.native){
+  document.querySelectorAll(".pinb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const on=await native.pin();document.querySelectorAll(".pinb").forEach(x=>x.textContent=on?"Épinglé":"Épingler")}});
+  let big=false;$("sizeb").hidden=false;$("sizeb").onclick=()=>{big=!big;$("sizeb").textContent=big?"Réduire":"Agrandir";native.size()};
+}
 route();
 </script>
 </body>
