@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alertes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--ink:#0f1330;--muted:#667091;--line:#e4e6f2;--bg:#f3f4fb;--card:#fff;--accent:#4f46e5;--tease:#db2777;--press:#ea580c;--ok:#059669}
+@media(prefers-color-scheme:dark){:root{--ink:#e8e9ff;--muted:#9aa3c7;--line:#262b55;--bg:#080b1d;--card:#11153a;--accent:#7c83ff}}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+[hidden]{display:none!important}
+input,select{font:inherit;width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin-bottom:10px}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:9px 14px;cursor:pointer;color:#fff;background:var(--accent)}
+button:disabled{opacity:.5}
+button.ghost{background:none;color:var(--muted);border:1px solid var(--line);padding:5px 12px;font-size:12px}
+button.on{background:var(--accent);color:#fff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.muted{color:var(--muted)}.err{color:#e11d48;min-height:20px;font-size:13px}
+label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:block;margin-bottom:4px}
+.tag{font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;color:#fff;white-space:nowrap}
+.tag.teasing{background:var(--tease)}.tag.pressing{background:var(--press)}.tag.m{background:var(--muted)}
+/* connexion */
+#auth{max-width:380px;margin:8vh auto;padding:0 14px}
+#auth button[type=submit]{width:100%}
+#mode{background:none;color:var(--muted);width:100%;margin-top:6px;font-weight:500}
+/* agent : petit flottant */
+body.agent{overflow:hidden}
+#agent{padding:12px}
+#agent .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+#agent .big{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 8px}
+#agent .big button{padding:16px 8px;font-size:15px}
+#bT{background:var(--tease)}#bP{background:var(--press)}
+#hist{font-size:12px;margin-top:8px}
+#hist div{display:flex;gap:6px;align-items:center;padding:3px 0;border-top:1px solid var(--line)}
+/* admin */
+#admin{max-width:1100px;margin:0 auto;padding:16px}
+#admin .top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+nav{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+nav button{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+nav button.on{background:var(--accent);color:#fff;border-color:transparent}
+.badge{background:#e11d48;color:#fff;border-radius:99px;padding:0 7px;font-size:11px;margin-left:6px}
+.badge:empty{display:none}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.bar select{width:auto;margin:0}
+.grp{margin-bottom:14px}
+.grp h3{margin:0 0 6px;font-size:15px;display:flex;gap:8px;align-items:center}
+.row{display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.row:last-child{border:0}
+.row.unread{background:rgba(79,70,229,.09);cursor:pointer;font-weight:600}
+.row .sp{flex:1;min-width:120px}
+.row select,.row input{width:auto;margin:0}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f1330;color:#fff;padding:8px 16px;border-radius:99px;font-weight:600;font-size:13px}
+</style>
+</head>
+<body>
+
+<form id="auth" class="card" hidden>
+  <h2 style="margin:0 0 12px">Alertes</h2>
+  <div id="nomRow" hidden><label>Nom complet</label><input id="nom"></div>
+  <label>Email</label><input id="email" type="email" required>
+  <label>Mot de passe</label><input id="pw" type="password" minlength="6" required>
+  <button id="go" type="submit">Se connecter</button>
+  <p id="err" class="err"></p>
+  <button id="mode" type="button">Créer un compte</button>
+</form>
+
+<!-- ESPACE AGENT : petit flottant -->
+<section id="agent" hidden>
+  <div class="top">
+    <div><b id="aWho"></b><br><span id="aModel" class="tag m"></span></div>
+    <button class="ghost" id="aOut">Quitter</button>
+  </div>
+  <label for="fan">Fan en discussion</label>
+  <input id="fan" placeholder="Nom du fan…" autocomplete="off">
+  <div class="big"><button id="bT">Teasing</button><button id="bP">Pressing</button></div>
+  <p id="aMsg" class="err"></p>
+  <div id="hist"></div>
+</section>
+
+<!-- ESPACE ADMIN -->
+<section id="admin" hidden>
+  <div class="top"><b>Espace admin · <span id="adWho"></span></b><button class="ghost" id="adOut">Se déconnecter</button></div>
+  <nav>
+    <button data-t="notif">Notifications<span id="bN" class="badge"></span></button>
+    <button data-t="agents">Agents</button>
+    <button data-t="modeles">Modèles</button>
+  </nav>
+
+  <div data-p="notif">
+    <div class="bar">
+      <button class="ghost" data-ty="all">Tous</button><button class="ghost" data-ty="teasing">Teasing</button><button class="ghost" data-ty="pressing">Pressing</button>
+      <select id="fModel"></select>
+      <select id="fGrp"><option value="modele">Classer par modèle</option><option value="agent">Classer par agent</option></select>
+      <button class="ghost" id="allRead">Tout marquer comme lu</button>
+    </div>
+    <div id="notifs"></div>
+  </div>
+
+  <div data-p="agents" hidden><div class="card" id="agList"></div></div>
+
+  <div data-p="modeles" hidden>
+    <div class="card">
+      <label>Nouveau modèle</label>
+      <div class="bar"><input id="newMod" placeholder="Nom du modèle" style="flex:1;margin:0"><button id="addMod">Ajouter</button></div>
+      <div id="modList"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+const SUPABASE_URL="COLLE_ICI_TON_URL_SUPABASE", SUPABASE_KEY="COLLE_ICI_TA_CLE_PUBLISHABLE";
+const $=i=>document.getElementById(i);
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+const fmt=d=>new Date(d).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+const LBL={teasing:"Teasing",pressing:"Pressing"};
+const native=m=>window.native&&window.native.mode(m);
+if(!window.supabase){document.body.textContent="Connexion à internet requise.";throw 0}
+const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+let me=null,alertes=[],profs=[],modeles=[],ch=null,timer=null,ac=null;
+let fType="all",tab="notif";
+
+function show(n){["auth","agent","admin"].forEach(i=>$(i).hidden=i!==n);document.body.className=n}
+function toast(t){const d=el("div","toast",t);document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
+function beep(type){try{ac=ac||new AudioContext();(type==="pressing"?[880,1175,880]:[784,988]).forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain(),s=ac.currentTime+i*.16;o.frequency.value=f;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(.25,s);g.gain.exponentialRampToValueAtTime(.001,s+.14);o.start(s);o.stop(s+.15)})}catch(e){}}
+
+/* ---------- Connexion ---------- */
+let signup=false;
+$("mode").onclick=()=>{signup=!signup;$("nomRow").hidden=!signup;$("go").textContent=signup?"Créer le compte":"Se connecter";$("mode").textContent=signup?"Déjà un compte ? Connexion":"Créer un compte"};
+$("auth").onsubmit=async e=>{
+  e.preventDefault();$("err").textContent="";
+  const email=$("email").value.trim(),password=$("pw").value;
+  const r=signup?await db.auth.signUp({email,password,options:{data:{nom:$("nom").value.trim()}}}):await db.auth.signInWithPassword({email,password});
+  if(r.error){$("err").textContent=r.error.message;return}
+  if(signup&&!r.data.session){$("err").textContent="Compte créé. Confirmez votre email puis connectez-vous.";return}
+  route();
+};
+async function logout(){cleanup();await db.auth.signOut();route()}
+$("aOut").onclick=$("adOut").onclick=logout;
+function cleanup(){clearInterval(timer);if(ch){db.removeChannel(ch);ch=null}window.native&&window.native.unread(0);document.title="Alertes"}
+
+async function route(){
+  const{data:{session}}=await db.auth.getSession();
+  if(!session){show("auth");native("login");return}
+  const{data:p}=await db.from("tp_profiles").select("*").eq("id",session.user.id).single();
+  if(!p){await db.auth.signOut();show("auth");$("err").textContent="Profil introuvable : exécutez schema.sql dans Supabase.";return}
+  me=p;p.role==="admin"?startAdmin():startAgent();
+}
+
+/* ---------- Agent ---------- */
+async function startAgent(){
+  show("agent");native("agent");
+  $("aWho").textContent=me.nom;$("aModel").textContent="Aucun modèle assigné";
+  if(me.modele_id){const{data}=await db.from("tp_modeles").select("nom").eq("id",me.modele_id).single();if(data)$("aModel").textContent=data.nom}
+  $("fan").value=localStorage.getItem("fan")||"";
+  loadHist();
+}
+async function loadHist(){
+  const{data}=await db.from("tp_alertes").select("fan,type,created_at").eq("agent_id",me.id).order("created_at",{ascending:false}).limit(5);
+  const h=$("hist");h.replaceChildren();
+  (data||[]).forEach(a=>{const d=el("div");d.append(el("span","tag "+a.type,LBL[a.type]),el("span",null,a.fan),el("span","muted",fmt(a.created_at)));h.appendChild(d)});
+}
+async function send(type){
+  const fan=$("fan").value.trim(),out=$("aMsg");
+  out.style.color="";
+  if(!fan){out.textContent="Saisissez le nom du fan.";$("fan").focus();return}
+  localStorage.setItem("fan",fan);
+  $("bT").disabled=$("bP").disabled=true;out.textContent="";
+  const{error}=await db.from("tp_alertes").insert({agent_id:me.id,fan,type});
+  setTimeout(()=>{$("bT").disabled=$("bP").disabled=false},1500);
+  if(error){out.textContent="Envoi impossible : "+error.message;return}
+  out.style.color="var(--ok)";out.textContent=LBL[type]+" envoyé pour "+fan;
+  loadHist();
+}
+$("bT").onclick=()=>send("teasing");$("bP").onclick=()=>send("pressing");
+
+/* ---------- Admin ---------- */
+async function startAdmin(){
+  show("admin");native("admin");$("adWho").textContent=me.nom;
+  await loadAll();setTab(tab);
+  ch=db.channel("tp").on("postgres_changes",{event:"*",schema:"public",table:"tp_alertes"},p=>{
+    if(p.eventType==="INSERT"){beep(p.new.type);toast(LBL[p.new.type]+" · "+p.new.agent_nom+" → "+p.new.fan)}
+    loadAlertes();
+  }).subscribe();
+  timer=setInterval(loadAll,30000);
+}
+async function loadAlertes(){
+  const{data}=await db.from("tp_alertes").select("*").order("created_at",{ascending:false}).limit(500);
+  alertes=data||[];render();
+}
+async function loadAll(){
+  const[p,m]=await Promise.all([db.from("tp_profiles").select("*").order("nom"),db.from("tp_modeles").select("*").order("nom")]);
+  profs=p.data||[];modeles=m.data||[];await loadAlertes();
+}
+function setTab(t){
+  tab=t;
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));
+  document.querySelectorAll("[data-p]").forEach(p=>p.hidden=p.dataset.p!==t);
+  render();
+}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>setTab(b.dataset.t));
+document.querySelectorAll("[data-ty]").forEach(b=>b.onclick=()=>{fType=b.dataset.ty;render()});
+$("fModel").onchange=$("fGrp").onchange=render;
+$("allRead").onclick=()=>markRead(alertes.filter(a=>!a.lu).map(a=>a.id));
+async function markRead(ids){if(!ids.length)return;await db.from("tp_alertes").update({lu:true}).in("id",ids);await loadAlertes()}
+
+function render(){
+  if($("admin").hidden)return;
+  const un=alertes.filter(a=>!a.lu).length;
+  $("bN").textContent=un||"";document.title=un?`(${un}) Alertes`:"Alertes";
+  window.native&&window.native.unread(un);
+  if(tab==="notif")renderNotifs();else if(tab==="agents")renderAgents();else renderModeles();
+}
+function renderNotifs(){
+  const fm=$("fModel"),cur=fm.value||"all";
+  fm.replaceChildren(new Option("Tous les modèles","all"),...modeles.map(m=>new Option(m.nom,m.id)),new Option("Sans modèle","none"));
+  fm.value=cur;
+  document.querySelectorAll("[data-ty]").forEach(b=>b.classList.toggle("on",b.dataset.ty===fType));
+  const byAgent=$("fGrp").value==="agent";
+  const list=alertes.filter(a=>(fType==="all"||a.type===fType)&&(fm.value==="all"||(a.modele_id||"none")===fm.value));
+  const g={};list.forEach(a=>{const k=byAgent?a.agent_nom:(a.modele_nom||"Sans modèle");(g[k]=g[k]||[]).push(a)});
+  const box=$("notifs");box.replaceChildren();
+  if(!list.length){box.textContent="Aucune notification.";return}
+  Object.keys(g).sort().forEach(k=>{
+    const arr=g[k],t=arr.filter(a=>a.type==="teasing").length,p=arr.length-t;
+    const sec=el("div","card grp"),h=el("h3",null,k);
+    h.append(el("span","tag teasing","Teasing "+t),el("span","tag pressing","Pressing "+p));
+    sec.appendChild(h);
+    arr.forEach(a=>{
+      const r=el("div","row"+(a.lu?"":" unread"));
+      r.append(el("span","tag "+a.type,LBL[a.type]),el("span","sp",byAgent?"→ "+a.fan:a.agent_nom+" → "+a.fan));
+      if(byAgent&&a.modele_nom)r.appendChild(el("span","tag m",a.modele_nom));
+      r.appendChild(el("span","muted",fmt(a.created_at)));
+      if(!a.lu)r.onclick=()=>markRead([a.id]);
+      sec.appendChild(r);
+    });
+    box.appendChild(sec);
+  });
+}
+function renderAgents(){
+  const box=$("agList");box.replaceChildren();
+  const ags=profs.filter(p=>p.role==="agent");
+  if(!ags.length){box.textContent="Aucun agent inscrit pour le moment.";return}
+  ags.forEach(p=>{
+    const mine=alertes.filter(a=>a.agent_id===p.id),t=mine.filter(a=>a.type==="teasing").length;
+    const r=el("div","row"),sel=document.createElement("select");
+    sel.append(new Option("— Aucun modèle —",""),...modeles.map(m=>new Option(m.nom,m.id)));
+    sel.value=p.modele_id||"";
+    sel.onchange=async()=>{const{error}=await db.from("tp_profiles").update({modele_id:sel.value||null}).eq("id",p.id);if(error)alert(error.message);else{toast("Modèle assigné");loadAll()}};
+    r.append(el("b","sp",p.nom),el("span","tag teasing","Teasing "+t),el("span","tag pressing","Pressing "+(mine.length-t)),sel);
+    box.appendChild(r);
+  });
+}
+function renderModeles(){
+  const box=$("modList");box.replaceChildren();
+  modeles.forEach(m=>{
+    const n=profs.filter(p=>p.modele_id===m.id).length,r=el("div","row"),d=el("button","ghost","Supprimer");
+    d.onclick=async()=>{if(!confirm("Supprimer le modèle « "+m.nom+" » ?"))return;await db.from("tp_modeles").delete().eq("id",m.id);loadAll()};
+    r.append(el("b","sp",m.nom),el("span","muted",n+" agent"+(n>1?"s":"")),d);
+    box.appendChild(r);
+  });
+}
+$("addMod").onclick=async()=>{
+  const nom=$("newMod").value.trim();if(!nom)return;
+  const{error}=await db.from("tp_modeles").insert({nom});
+  if(error){alert(error.message);return}
+  $("newMod").value="";loadAll();
+};
+$("newMod").onkeydown=e=>{if(e.key==="Enter")$("addMod").click()};
+$("fan").onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};
+
+route();
+</script>
+</body>
+</html>
