@@ -1,26 +1,58 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, screen } = require('electron');
 const path = require('path');
+
+// >>> Mets ici l'adresse de ton site Vercel. Mettre à jour le site = mettre à jour le logiciel.
+const APP_URL = 'https://notif-kappa.vercel.app';
+
 if (!app.requestSingleInstanceLock()) app.quit();
-let win;
+let win, pinned = true, big = false;
+
+function dock(w, h) { // coin haut-droit de l'écran
+  const { workArea: a } = screen.getPrimaryDisplay();
+  win.setMinimumSize(300, 300);
+  win.setSize(w, h);
+  win.setPosition(a.x + a.width - w - 20, a.y + 40);
+}
+
 function create() {
   Menu.setApplicationMenu(null);
   win = new BrowserWindow({
-    width: 420, height: 620, autoHideMenuBar: true, icon: path.join(__dirname, 'icon.png'),
+    width: 420, height: 620, autoHideMenuBar: true, alwaysOnTop: true,
+    icon: path.join(__dirname, 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
-  win.loadFile('index.html');
+  win.setAlwaysOnTop(true, 'screen-saver');
+  win.loadURL(APP_URL);
+
+  // Pas d'internet ou site inaccessible : version embarquée en secours
+  win.webContents.on('did-fail-load', (_e, _c, _d, _u, isMainFrame) => {
+    if (isMainFrame) win.loadFile('index.html');
+  });
+  // La fenêtre ne peut pas quitter ton site
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith(APP_URL) && !url.startsWith('file:')) e.preventDefault();
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // F5 / Ctrl+R = recharger (récupère la dernière version du site)
+  win.webContents.on('before-input-event', (e, i) => {
+    if (i.type === 'keyDown' && (i.key === 'F5' || (i.control && i.key.toLowerCase() === 'r'))) {
+      win.webContents.reloadIgnoringCache(); e.preventDefault();
+    }
+  });
 }
-// Agent = petit flottant toujours au premier plan ; admin = grande fenêtre
+
 ipcMain.on('mode', (_, m) => {
   if (!win) return;
-  if (m === 'agent') {
-    win.setResizable(true); win.setMinimumSize(300, 300);
-    win.setSize(340, 440); win.setAlwaysOnTop(true, 'screen-saver');
-    const { workArea } = require('electron').screen.getPrimaryDisplay();
-    win.setPosition(workArea.x + workArea.width - 360, workArea.y + 40);
-  } else if (m === 'admin') {
-    win.setAlwaysOnTop(false); win.setMinimumSize(700, 500); win.setSize(1100, 760); win.center();
-  } else { win.setAlwaysOnTop(false); win.setSize(420, 620); win.center(); }
+  win.setResizable(true);
+  if (m === 'agent') dock(340, 440);
+  else if (m === 'admin') { big = false; dock(480, 680); }
+  else { win.setSize(420, 620); win.center(); }
+  win.setAlwaysOnTop(pinned, 'screen-saver');
+});
+ipcMain.handle('pin', () => { pinned = !pinned; win.setAlwaysOnTop(pinned, 'screen-saver'); return pinned; });
+ipcMain.on('size', () => { // admin : compact <-> grand
+  big = !big;
+  if (big) { win.setSize(1100, 760); win.center(); } else dock(480, 680);
 });
 ipcMain.on('unread', (_, n) => {
   app.setBadgeCount(n);
