@@ -51,6 +51,10 @@ nav button.on{background:var(--accent);color:#fff;border-color:transparent}
 .row.unread{background:rgba(79,70,229,.09);cursor:pointer;font-weight:600}
 .row .sp{flex:1;min-width:120px}
 .row select,.row input{width:auto;margin:0}
+body.folded{overflow:hidden}
+body.folded #agent>:not(.top),body.folded #admin>:not(.top){display:none}
+body.folded .hf{display:none}
+body.folded .top{margin:0}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f1330;color:#fff;padding:8px 16px;border-radius:99px;font-weight:600;font-size:13px}
 </style>
 </head>
@@ -70,7 +74,7 @@ nav button.on{background:var(--accent);color:#fff;border-color:transparent}
 <section id="agent" hidden>
   <div class="top">
     <div><b id="aWho"></b><br><span id="aModel" class="tag m"></span></div>
-    <div><button class="ghost pinb" hidden>Épinglé</button> <button class="ghost" id="aOut">Quitter</button></div>
+    <div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost pinb hf" hidden>Épinglé</button> <button class="ghost hf" id="aOut">Quitter</button></div>
   </div>
   <label for="fan">Fan en discussion</label>
   <input id="fan" placeholder="Nom du fan…" autocomplete="off">
@@ -81,7 +85,7 @@ nav button.on{background:var(--accent);color:#fff;border-color:transparent}
 
 <!-- ESPACE ADMIN -->
 <section id="admin" hidden>
-  <div class="top"><b>Espace admin · <span id="adWho"></span></b><div><button class="ghost pinb" hidden>Épinglé</button> <button class="ghost" id="sizeb" hidden>Agrandir</button> <button class="ghost" id="adOut">Se déconnecter</button></div></div>
+  <div class="top"><b>Espace admin · <span id="adWho"></span></b><span id="topN" class="badge"></span><div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost pinb hf" hidden>Épinglé</button> <button class="ghost hf" id="sizeb" hidden>Agrandir</button> <button class="ghost hf" id="adOut">Se déconnecter</button></div></div>
   <nav>
     <button data-t="notif">Notifications<span id="bN" class="badge"></span></button>
     <button data-t="agents">Agents</button>
@@ -208,7 +212,7 @@ async function markRead(ids){if(!ids.length)return;await db.from("tp_alertes").u
 function render(){
   if($("admin").hidden)return;
   const un=alertes.filter(a=>!a.lu).length;
-  $("bN").textContent=un||"";document.title=un?`(${un}) Alertes`:"Alertes";
+  $("bN").textContent=un||"";$("topN").textContent=un||"";document.title=un?`(${un}) Alertes`:"Alertes";
   window.native&&window.native.unread(un);
   if(tab==="notif")renderNotifs();else if(tab==="agents")renderAgents();else renderModeles();
 }
@@ -271,6 +275,7 @@ $("newMod").onkeydown=e=>{if(e.key==="Enter")$("addMod").click()};
 $("fan").onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};
 
 try{if(window.native){
+  document.querySelectorAll(".foldb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const f=await window.native.fold();document.body.classList.toggle("folded",f);document.querySelectorAll(".foldb").forEach(x=>x.textContent=f?"Déplier":"Réduire")}});
   document.querySelectorAll(".pinb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const on=await window.native.pin();document.querySelectorAll(".pinb").forEach(x=>x.textContent=on?"Épinglé":"Épingler")}});
   let big=false;$("sizeb").hidden=false;$("sizeb").onclick=()=>{big=!big;$("sizeb").textContent=big?"Réduire":"Agrandir";window.native.size()};
 }}catch(e){console.error(e)}
