@@ -7,7 +7,7 @@ const APP_URL = 'https://notif-kappa.vercel.app';
 if (!app.requestSingleInstanceLock()) app.quit();
 let win, role = 'login', big = false, folded = false;
 
-const OPEN = { agent: [320, 370], admin: [440, 600] }; // fenêtre ouverte
+const OPEN = { agent: [320, 420], admin: [440, 600] }; // fenêtre ouverte
 const BUB = [72, 72];                                  // bulle
 const BIG = [1100, 760], LOGIN = [420, 600];
 
@@ -56,7 +56,7 @@ ipcMain.on('mode', (_, m) => {
   layout(role === 'login' ? 'center' : 'dock');
   win.setAlwaysOnTop(true, 'screen-saver');
 });
-ipcMain.handle('fold', (_, f) => { folded = f === undefined ? !folded : !!f; layout('anchor'); return folded; });
+ipcMain.handle('fold', (_, f) => { folded = f === undefined ? !folded : !!f; layout('anchor'); if (!folded) { win.show(); win.focus(); } return folded; });
 ipcMain.on('size', () => { big = !big; folded = false; layout(big ? 'center' : 'dock'); });
 ipcMain.on('drag', (_, dx, dy) => { // déplacement de la bulle à la souris
   const [x, y] = win.getPosition();
