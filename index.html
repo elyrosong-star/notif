@@ -69,6 +69,8 @@ body.folded #bub{display:grid}
 .dec{display:flex;gap:8px;align-items:center;padding:8px;border-radius:10px;border:1px solid var(--line);margin-bottom:6px;font-size:13px}
 .dec.valide{border-color:var(--ok)}.dec.refuse{border-color:#e11d48}.dec .sp{flex:1}.dec button{padding:4px 10px;font-size:12px}
 .row .btn{padding:4px 10px;font-size:12px}
+#mods{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;font-size:13px}
+#mods button{padding:5px 12px;font-size:12px}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f1330;color:#fff;padding:8px 16px;border-radius:99px;font-weight:600;font-size:13px}
 </style>
 </head>
@@ -93,6 +95,8 @@ body.folded #bub{display:grid}
     <div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="aOut">Quitter</button> <button class="ghost appOnly" data-close>✕</button></div>
   </div>
   <div id="dec"></div>
+  <label>Modèle</label>
+  <div id="mods"></div>
   <label for="fan">Fan en discussion</label>
   <input id="fan" placeholder="Nom du fan…" autocomplete="off">
   <div class="big"><button id="bT">Teasing</button><button id="bP">Pressing</button></div>
@@ -102,11 +106,12 @@ body.folded #bub{display:grid}
 
 <!-- ESPACE ADMIN -->
 <section id="admin" hidden>
-  <div class="top"><b>Espace admin · <span id="adWho"></span></b><span id="topN" class="badge"></span><div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="sizeb" hidden>Agrandir</button> <button class="ghost hf" id="adOut">Se déconnecter</button> <button class="ghost appOnly" data-close>✕</button></div></div>
+  <div class="top"><b><span id="adTitle">Espace admin</span> · <span id="adWho"></span></b><span id="topN" class="badge"></span><div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="sizeb" hidden>Agrandir</button> <button class="ghost hf" id="adOut">Se déconnecter</button> <button class="ghost appOnly" data-close>✕</button></div></div>
   <nav>
     <button data-t="notif">Notifications<span id="bN" class="badge"></span></button>
     <button data-t="agents">Agents</button>
     <button data-t="modeles">Modèles</button>
+    <button data-t="equipe">Team leaders</button>
   </nav>
 
   <div data-p="notif">
@@ -121,6 +126,15 @@ body.folded #bub{display:grid}
   </div>
 
   <div data-p="agents" hidden><div class="card" id="agList"></div></div>
+
+  <div data-p="equipe" hidden>
+    <div class="card">
+      <label>Nommer un team leader</label>
+      <div class="bar"><select id="newLead" style="flex:1"></select><button id="addLead">Nommer</button></div>
+      <p class="muted" style="font-size:13px">Coche ensuite les modèles que chaque team leader peut voir. Il ne reçoit que leurs alertes.</p>
+      <div id="leadList"></div>
+    </div>
+  </div>
 
   <div data-p="modeles" hidden>
     <div class="card">
@@ -143,7 +157,7 @@ const LBL={teasing:"Teasing",pressing:"Pressing"},STAT={attente:"En attente",val
 const nat=m=>window.native&&window.native.mode(m);
 if(!window.supabase){document.body.textContent="Connexion à internet requise.";throw 0}
 const db=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-let me=null,alertes=[],profs=[],modeles=[],ch=null,timer=null,ac=null;
+let me=null,alertes=[],profs=[],modeles=[],leads=[],amods=[],myMods=[],curMod=null,ch=null,timer=null,ac=null;
 let fType="all",tab="notif";
 
 function show(n){["auth","agent","admin"].forEach(i=>$(i).hidden=i!==n);document.body.className=n}
@@ -181,14 +195,29 @@ async function route(){
   if(!session){show("auth");nat("login");return}
   const{data:p,error:pe}=await db.from("tp_profiles").select("*").eq("id",session.user.id).maybeSingle();
   if(!p){await db.auth.signOut();show("auth");$("err").textContent=pe?"Erreur Supabase : "+pe.message:"Aucun profil pour ce compte (id "+session.user.id+").";return}
-  me=p;p.role==="admin"?startAdmin():startAgent();
+  me=p;p.role==="admin"||p.role==="leader"?startAdmin():startAgent();
 }
 
 /* ---------- Agent ---------- */
+function drawMods(){
+  const box=$("mods");box.replaceChildren();box.className="";
+  if(!myMods.length){box.className="muted";box.textContent="Aucun modèle assigné : prévenez l'admin.";return}
+  myMods.forEach(m=>{
+    const b=el("button","ghost"+(m.id===curMod?" on":""),m.nom);
+    b.onclick=()=>{curMod=m.id;localStorage.setItem("mod",m.id);drawMods()};
+    box.appendChild(b);
+  });
+}
 async function startAgent(){
   show("agent");nat("agent");
-  $("aWho").textContent=me.nom;$("aModel").textContent="Aucun modèle assigné";
-  if(me.modele_id){const{data}=await db.from("tp_modeles").select("nom").eq("id",me.modele_id).single();if(data)$("aModel").textContent=data.nom}
+  $("aWho").textContent=me.nom;
+  const[am,ml]=await Promise.all([db.from("tp_agent_modeles").select("modele_id").eq("agent_id",me.id),db.from("tp_modeles").select("id,nom").order("nom")]);
+  const ids=(am.data||[]).map(x=>x.modele_id);
+  myMods=(ml.data||[]).filter(m=>ids.includes(m.id));
+  const saved=localStorage.getItem("mod");
+  curMod=myMods.some(m=>m.id===saved)?saved:(myMods.length===1?myMods[0].id:null);
+  $("aModel").textContent=!myMods.length?"Aucun modèle":myMods.length>1?myMods.length+" modèles":myMods[0].nom;
+  drawMods();
   $("fan").value=localStorage.getItem("fan")||"";
   document.addEventListener("click",()=>{try{ac=ac||new AudioContext();ac.resume()}catch(e){}if(window.Notification&&Notification.permission==="default")Notification.requestPermission()},{once:true});
   loadHist();
@@ -203,16 +232,16 @@ async function startAgent(){
 }
 async function loadHist(){
   const[h,d]=await Promise.all([
-    db.from("tp_alertes").select("fan,type,statut,created_at").eq("agent_id",me.id).order("created_at",{ascending:false}).limit(5),
-    db.from("tp_alertes").select("id,fan,type,statut").eq("agent_id",me.id).neq("statut","attente").eq("vu_agent",false).order("traite_at",{ascending:true})]);
+    db.from("tp_alertes").select("fan,type,statut,modele_nom,created_at").eq("agent_id",me.id).order("created_at",{ascending:false}).limit(5),
+    db.from("tp_alertes").select("id,fan,type,statut,modele_nom").eq("agent_id",me.id).neq("statut","attente").eq("vu_agent",false).order("traite_at",{ascending:true})]);
   const hist=$("hist");hist.replaceChildren();
-  (h.data||[]).forEach(a=>{const x=el("div");x.append(el("span","tag "+a.type,LBL[a.type]),el("span",null,a.fan),el("span","tag "+a.statut,STAT[a.statut]),el("span","muted",fmt(a.created_at)));hist.appendChild(x)});
+  (h.data||[]).forEach(a=>{const x=el("div");x.append(el("span","tag "+a.type,LBL[a.type]),el("span",null,a.fan),...(a.modele_nom?[el("span","tag m",a.modele_nom)]:[]),el("span","tag "+a.statut,STAT[a.statut]),el("span","muted",fmt(a.created_at)));hist.appendChild(x)});
   const box=$("dec");box.replaceChildren();
   const list=d.data||[];
   list.forEach(a=>{
     const x=el("div","dec "+a.statut),b=el("button",null,"Retour");
     b.onclick=async()=>{b.disabled=true;await db.rpc("tp_ack",{p_id:a.id});loadHist()};
-    x.append(el("span","tag "+a.statut,STAT[a.statut]),el("span","sp",LBL[a.type]+" · "+a.fan),b);box.appendChild(x);
+    x.append(el("span","tag "+a.statut,STAT[a.statut]),el("span","sp",LBL[a.type]+" · "+a.fan+(a.modele_nom?" · "+a.modele_nom:"")),b);box.appendChild(x);
   });
   const n=list.length;
   $("bubN").textContent=n||"";$("bub").classList.toggle("ring",n>0);
@@ -222,10 +251,11 @@ async function loadHist(){
 async function send(type){
   const fan=$("fan").value.trim(),out=$("aMsg");
   out.style.color="";
+  if(myMods.length&&!curMod){out.textContent="Choisissez le modèle.";return}
   if(!fan){out.textContent="Saisissez le nom du fan.";$("fan").focus();return}
   localStorage.setItem("fan",fan);
   $("bT").disabled=$("bP").disabled=true;out.textContent="";
-  const{error}=await db.from("tp_alertes").insert({agent_id:me.id,fan,type});
+  const{error}=await db.from("tp_alertes").insert({agent_id:me.id,fan,type,modele_id:curMod||null});
   setTimeout(()=>{$("bT").disabled=$("bP").disabled=false},1500);
   if(error){out.textContent="Envoi impossible : "+error.message;return}
   out.style.color="var(--ok)";out.textContent=LBL[type]+" envoyé pour "+fan;
@@ -236,6 +266,9 @@ $("bT").onclick=()=>send("teasing");$("bP").onclick=()=>send("pressing");
 /* ---------- Admin ---------- */
 async function startAdmin(){
   show("admin");nat("admin");$("adWho").textContent=me.nom;
+  const L=isLeader();if(L)tab="notif";
+  $("adTitle").textContent=L?"Espace team leader":"Espace admin";
+  document.querySelectorAll("nav button").forEach(b=>{b.hidden=L&&b.dataset.t!=="notif"});
   document.addEventListener("click",()=>{try{ac=ac||new AudioContext();ac.resume()}catch(e){}if(window.Notification&&Notification.permission==="default")Notification.requestPermission()},{once:true});
   await loadAll();setTab(tab);
   ch=db.channel("tp").on("postgres_changes",{event:"*",schema:"public",table:"tp_alertes"},p=>{
@@ -249,9 +282,12 @@ async function loadAlertes(){
   const{data}=await db.from("tp_alertes").select("*").order("created_at",{ascending:false}).limit(500);
   alertes=data||[];render();
 }
+const isLeader=()=>me&&me.role==="leader";
 async function loadAll(){
-  const[p,m]=await Promise.all([db.from("tp_profiles").select("*").order("nom"),db.from("tp_modeles").select("*").order("nom")]);
-  profs=p.data||[];modeles=m.data||[];await loadAlertes();
+  const[p,m,l,a]=await Promise.all([db.from("tp_profiles").select("*").order("nom"),db.from("tp_modeles").select("*").order("nom"),db.from("tp_leader_modeles").select("*"),db.from("tp_agent_modeles").select("*")]);
+  profs=p.data||[];modeles=m.data||[];leads=l.data||[];amods=a.data||[];
+  if(isLeader()){const ids=leads.map(x=>x.modele_id);modeles=modeles.filter(x=>ids.includes(x.id))}
+  await loadAlertes();
 }
 function setTab(t){
   tab=t;
@@ -270,7 +306,7 @@ function render(){
   const un=alertes.filter(a=>!a.lu).length;
   $("bN").textContent=un||"";$("topN").textContent=un||"";$("bubN").textContent=un||"";$("bub").classList.toggle("ring",un>0);document.title=un?`(${un}) Alertes`:"Alertes";
   if(un!==lastUn){lastUn=un;setFavicon(un);window.native&&window.native.unread(un,iconURL(un,false))}
-  if(tab==="notif")renderNotifs();else if(tab==="agents")renderAgents();else renderModeles();
+  if(tab==="notif")renderNotifs();else if(tab==="agents")renderAgents();else if(tab==="equipe")renderEquipe();else renderModeles();
 }
 async function decide(a,statut){
   const{error}=await db.from("tp_alertes").update({statut,vu_agent:false,lu:true,traite_at:new Date().toISOString()}).eq("id",a.id);
@@ -279,7 +315,7 @@ async function decide(a,statut){
 }
 function renderNotifs(){
   const fm=$("fModel"),cur=fm.value||"all";
-  fm.replaceChildren(new Option("Tous les modèles","all"),...modeles.map(m=>new Option(m.nom,m.id)),new Option("Sans modèle","none"));
+  fm.replaceChildren(new Option("Tous les modèles","all"),...modeles.map(m=>new Option(m.nom,m.id)),...(isLeader()?[]:[new Option("Sans modèle","none")]));
   fm.value=cur;
   document.querySelectorAll("[data-ty]").forEach(b=>b.classList.toggle("on",b.dataset.ty===fType));
   const byAgent=$("fGrp").value==="agent";
@@ -315,14 +351,57 @@ function renderAgents(){
   if(!ags.length){box.textContent="Aucun agent inscrit pour le moment.";return}
   ags.forEach(p=>{
     const mine=alertes.filter(a=>a.agent_id===p.id),t=mine.filter(a=>a.type==="teasing").length;
-    const r=el("div","row"),sel=document.createElement("select");
-    sel.append(new Option("— Aucun modèle —",""),...modeles.map(m=>new Option(m.nom,m.id)));
-    sel.value=p.modele_id||"";
-    sel.onchange=async()=>{const{error}=await db.from("tp_profiles").update({modele_id:sel.value||null}).eq("id",p.id);if(error)alert(error.message);else{toast("Modèle assigné");loadAll()}};
-    r.append(el("b","sp",p.nom),el("span","tag teasing","Teasing "+t),el("span","tag pressing","Pressing "+(mine.length-t)),sel);
-    box.appendChild(r);
+    const row=el("div","row"),left=el("div","sp"),chips=el("div","bar");
+    chips.style.margin="6px 0 0";
+    const has=amods.filter(x=>x.agent_id===p.id).map(x=>x.modele_id);
+    modeles.forEach(m=>{
+      const on=has.includes(m.id),b=el("button","ghost"+(on?" on":""),m.nom);
+      b.onclick=async()=>{
+        const{error}=await(on?db.from("tp_agent_modeles").delete().eq("agent_id",p.id).eq("modele_id",m.id):db.from("tp_agent_modeles").insert({agent_id:p.id,modele_id:m.id}));
+        if(error)alert(error.message);loadAll();
+      };
+      chips.appendChild(b);
+    });
+    if(!modeles.length)chips.textContent="Créez d'abord des modèles.";
+    left.append(el("b",null,p.nom),chips);
+    row.append(left,el("span","tag teasing","Teasing "+t),el("span","tag pressing","Pressing "+(mine.length-t)));
+    box.appendChild(row);
   });
 }
+function renderEquipe(){
+  const sel=$("newLead");
+  sel.replaceChildren(new Option("— Choisir un agent —",""),...profs.filter(p=>p.role==="agent").map(p=>new Option(p.nom,p.id)));
+  const box=$("leadList");box.replaceChildren();
+  const ls=profs.filter(p=>p.role==="leader");
+  if(!ls.length){box.textContent="Aucun team leader pour le moment.";return}
+  ls.forEach(p=>{
+    const row=el("div","row"),chips=el("div","bar"),left=el("div","sp");
+    chips.style.margin="6px 0 0";
+    const mine=leads.filter(x=>x.leader_id===p.id).map(x=>x.modele_id);
+    modeles.forEach(m=>{
+      const on=mine.includes(m.id),b=el("button","ghost"+(on?" on":""),m.nom);
+      b.onclick=async()=>{
+        const{error}=await(on?db.from("tp_leader_modeles").delete().eq("leader_id",p.id).eq("modele_id",m.id):db.from("tp_leader_modeles").insert({leader_id:p.id,modele_id:m.id}));
+        if(error)alert(error.message);loadAll();
+      };
+      chips.appendChild(b);
+    });
+    if(!modeles.length)chips.textContent="Créez d'abord des modèles.";
+    const rm=el("button","ghost","Retirer");
+    rm.onclick=async()=>{
+      if(!confirm("Retirer le rôle de team leader à "+p.nom+" ?"))return;
+      await db.from("tp_leader_modeles").delete().eq("leader_id",p.id);
+      await db.from("tp_profiles").update({role:"agent"}).eq("id",p.id);loadAll();
+    };
+    left.append(el("b",null,p.nom),chips);row.append(left,rm);box.appendChild(row);
+  });
+}
+$("addLead").onclick=async()=>{
+  const id=$("newLead").value;if(!id)return;
+  const{error}=await db.from("tp_profiles").update({role:"leader"}).eq("id",id);
+  if(error){alert(error.message);return}
+  toast("Team leader nommé : assigne-lui des modèles");loadAll();
+};
 function renderModeles(){
   const box=$("modList");box.replaceChildren();
   modeles.forEach(m=>{
