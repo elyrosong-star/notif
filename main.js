@@ -7,32 +7,34 @@ const APP_URL = 'https://notif-kappa.vercel.app';
 if (!app.requestSingleInstanceLock()) app.quit();
 let win, role = 'login', big = false, folded = false;
 
-// Tailles de la zone de contenu : [largeur, hauteur]
-const OPEN = { agent: [320, 370], admin: [440, 600] };
-const FOLD = [320, 72];
-const BIG = [1100, 760];
+const OPEN = { agent: [320, 370], admin: [440, 600] }; // fenêtre ouverte
+const BUB = [72, 72];                                  // bulle
+const BIG = [1100, 760], LOGIN = [420, 600];
 
-function layout() {
+// how : 'dock' = coin haut-droit · 'center' = centré · 'anchor' = garde le coin haut-droit actuel
+function layout(how) {
   if (!win) return;
-  win.setResizable(true);
-  win.setMinimumSize(200, 40);
-  if (role === 'login') { win.setContentSize(420, 600); win.center(); return; }
-  if (role === 'admin' && big && !folded) { win.setContentSize(...BIG); win.center(); return; }
-  const [w, h] = folded ? FOLD : OPEN[role];
-  win.setContentSize(w, h);
-  const { workArea: a } = screen.getPrimaryDisplay(); // coin haut-droit de l'écran
-  const [ow] = win.getSize();
-  win.setPosition(a.x + a.width - ow - 20, a.y + 40);
+  let [w, h] = role === 'login' ? LOGIN : (role === 'admin' && big && !folded) ? BIG : folded ? BUB : OPEN[role];
+  const b = win.getBounds(), a = screen.getDisplayMatching(b).workArea;
+  let x, y;
+  if (how === 'center') { x = a.x + (a.width - w) / 2; y = a.y + (a.height - h) / 2; }
+  else if (how === 'anchor') { x = b.x + b.width - w; y = b.y; }
+  else { x = a.x + a.width - w - 20; y = a.y + 40; }
+  x = Math.max(a.x, Math.min(x, a.x + a.width - w));
+  y = Math.max(a.y, Math.min(y, a.y + a.height - h));
+  win.setBounds({ x: Math.round(x), y: Math.round(y), width: w, height: h });
 }
 
 function create() {
   Menu.setApplicationMenu(null);
   win = new BrowserWindow({
-    width: 420, height: 640, autoHideMenuBar: true, alwaysOnTop: true, minimizable: false, maximizable: false,
-    icon: path.join(__dirname, 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' }
+    width: LOGIN[0], height: LOGIN[1], frame: false, transparent: true, hasShadow: false, resizable: false,
+    backgroundColor: '#00000000', alwaysOnTop: true, icon: path.join(__dirname, 'icon.png'),
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true,
+      backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' }
   });
-  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setAlwaysOnTop(true, 'screen-saver'); // toujours épinglé
+  layout('center');
   win.loadURL(APP_URL);
 
   win.webContents.on('did-fail-load', (_e, _c, _d, _u, isMainFrame) => {
@@ -51,11 +53,16 @@ function create() {
 
 ipcMain.on('mode', (_, m) => {
   role = m; big = false; folded = false;
-  layout();
-  win.setAlwaysOnTop(true, 'screen-saver'); // toujours épinglé, sans option pour le retirer
+  layout(role === 'login' ? 'center' : 'dock');
+  win.setAlwaysOnTop(true, 'screen-saver');
 });
-ipcMain.handle('fold', () => { folded = !folded; layout(); return folded; });
-ipcMain.on('size', () => { big = !big; folded = false; layout(); });
+ipcMain.handle('fold', (_, f) => { folded = f === undefined ? !folded : !!f; layout('anchor'); return folded; });
+ipcMain.on('size', () => { big = !big; folded = false; layout(big ? 'center' : 'dock'); });
+ipcMain.on('drag', (_, dx, dy) => { // déplacement de la bulle à la souris
+  const [x, y] = win.getPosition();
+  win.setPosition(Math.round(x + dx), Math.round(y + dy));
+});
+ipcMain.on('close', () => app.quit());
 ipcMain.on('unread', (_, n, icon) => { // pastille rouge avec le nombre sur l'icône de la barre des tâches
   if (!win) return;
   try { win.setOverlayIcon(n && icon ? nativeImage.createFromDataURL(icon) : null, n ? n + ' alerte(s) non lue(s)' : ''); } catch (e) {}
