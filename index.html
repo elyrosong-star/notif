@@ -51,16 +51,28 @@ nav button.on{background:var(--accent);color:#fff;border-color:transparent}
 .row.unread{background:rgba(79,70,229,.09);cursor:pointer;font-weight:600}
 .row .sp{flex:1;min-width:120px}
 .row select,.row input{width:auto;margin:0}
-body.folded{overflow:hidden}
-body.folded #agent>:not(.top),body.folded #admin>:not(.top){display:none}
-body.folded .hf{display:none}
-body.folded .top{margin:0}
+.wbar,.appOnly{display:none}
+html.app,html.app body{background:transparent;overflow:hidden}
+html.app #shell{background:var(--bg);border:1px solid var(--line);border-radius:14px;height:100vh;overflow:auto}
+html.app .appOnly{display:inline-block}
+html.app .wbar{display:flex;justify-content:space-between;align-items:center;padding:8px 10px 0;font-weight:700;color:var(--muted)}
+html.app .wbar,html.app .top{-webkit-app-region:drag}
+html.app button,html.app select,html.app input{-webkit-app-region:no-drag}
+#bub{display:none;position:relative;width:56px;height:56px;margin:8px;border-radius:50%;place-items:center;cursor:pointer;user-select:none;touch-action:none;background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 4px 10px rgba(15,19,48,.35)}
+#bub svg{width:26px;height:26px;fill:none;stroke:#fff;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+#bub .badge{position:absolute;top:-4px;right:-4px;pointer-events:none}
+#bub.ring{animation:ring 1.4s ease-out infinite}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(225,29,72,.6)}100%{box-shadow:0 0 0 8px rgba(225,29,72,0)}}
+body.folded #shell{display:none}
+body.folded #bub{display:grid}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f1330;color:#fff;padding:8px 16px;border-radius:99px;font-weight:600;font-size:13px}
 </style>
 </head>
 <body>
 
+<div id="shell">
 <form id="auth" class="card" hidden>
+  <div class="wbar"><span>Alertes</span><button type="button" class="ghost" data-close>✕</button></div>
   <h2 style="margin:0 0 12px">Alertes</h2>
   <div id="nomRow" hidden><label>Nom complet</label><input id="nom"></div>
   <label>Email</label><input id="email" type="email" required>
@@ -74,7 +86,7 @@ body.folded .top{margin:0}
 <section id="agent" hidden>
   <div class="top">
     <div><b id="aWho"></b><br><span id="aModel" class="tag m"></span></div>
-    <div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="aOut">Quitter</button></div>
+    <div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="aOut">Quitter</button> <button class="ghost appOnly" data-close>✕</button></div>
   </div>
   <label for="fan">Fan en discussion</label>
   <input id="fan" placeholder="Nom du fan…" autocomplete="off">
@@ -85,7 +97,7 @@ body.folded .top{margin:0}
 
 <!-- ESPACE ADMIN -->
 <section id="admin" hidden>
-  <div class="top"><b>Espace admin · <span id="adWho"></span></b><span id="topN" class="badge"></span><div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="sizeb" hidden>Agrandir</button> <button class="ghost hf" id="adOut">Se déconnecter</button></div></div>
+  <div class="top"><b>Espace admin · <span id="adWho"></span></b><span id="topN" class="badge"></span><div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="sizeb" hidden>Agrandir</button> <button class="ghost hf" id="adOut">Se déconnecter</button> <button class="ghost appOnly" data-close>✕</button></div></div>
   <nav>
     <button data-t="notif">Notifications<span id="bN" class="badge"></span></button>
     <button data-t="agents">Agents</button>
@@ -113,9 +125,12 @@ body.folded .top{margin:0}
   </div>
 </section>
 
+</div>
+<div id="bub" title="Ouvrir"><span id="bubN" class="badge"></span><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.5 7.2L3 21l1.8-5.5A8 8 0 1 1 21 12z"/></svg></div>
 <script>
 const SUPABASE_URL="https://sfwlakgehkrbfqzeedyl.supabase.co", SUPABASE_KEY="sb_publishable_I2M_h5Wx3_plA-a5ynnW-w_eFs-idJa";
 const $=i=>document.getElementById(i);
+if(window.native)document.documentElement.classList.add("app");
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const fmt=d=>new Date(d).toLocaleString("fr-FR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
 const LBL={teasing:"Teasing",pressing:"Pressing"};
@@ -225,7 +240,7 @@ async function markRead(ids){if(!ids.length)return;await db.from("tp_alertes").u
 function render(){
   if($("admin").hidden)return;
   const un=alertes.filter(a=>!a.lu).length;
-  $("bN").textContent=un||"";$("topN").textContent=un||"";document.title=un?`(${un}) Alertes`:"Alertes";
+  $("bN").textContent=un||"";$("topN").textContent=un||"";$("bubN").textContent=un||"";$("bub").classList.toggle("ring",un>0);document.title=un?`(${un}) Alertes`:"Alertes";
   if(un!==lastUn){lastUn=un;setFavicon(un);window.native&&window.native.unread(un,iconURL(un,false))}
   if(tab==="notif")renderNotifs();else if(tab==="agents")renderAgents();else renderModeles();
 }
@@ -288,8 +303,20 @@ $("newMod").onkeydown=e=>{if(e.key==="Enter")$("addMod").click()};
 $("fan").onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};
 
 try{if(window.native){
-  document.querySelectorAll(".foldb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const f=await window.native.fold();document.body.classList.toggle("folded",f);document.querySelectorAll(".foldb").forEach(x=>x.textContent=f?"Déplier":"Réduire")}});
-  let big=false;$("sizeb").hidden=false;$("sizeb").onclick=()=>{big=!big;$("sizeb").textContent=big?"Réduire":"Agrandir";window.native.size()};
+  const N=window.native,B=document.body;let last=Date.now(),isBig=false;
+  const live=()=>(B.classList.contains("agent")||B.classList.contains("admin"))&&!B.classList.contains("folded")&&!isBig;
+  async function setFold(f){const r=await N.fold(f);B.classList.toggle("folded",r);last=Date.now()}
+  document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>N.close());
+  document.querySelectorAll(".foldb").forEach(b=>{b.hidden=false;b.onclick=()=>setFold(true)});
+  $("sizeb").hidden=false;$("sizeb").onclick=()=>{isBig=!isBig;$("sizeb").textContent=isBig?"Compact":"Agrandir";N.size()};
+  // bulle : toucher = ouvrir, glisser = déplacer
+  const bub=$("bub");let d=null;
+  bub.onpointerdown=e=>{d={x:e.screenX,y:e.screenY,m:false};bub.setPointerCapture(e.pointerId)};
+  bub.onpointermove=e=>{if(!d)return;const dx=e.screenX-d.x,dy=e.screenY-d.y;if(!d.m&&Math.abs(dx)+Math.abs(dy)<5)return;d.m=true;N.drag(dx,dy);d.x=e.screenX;d.y=e.screenY};
+  bub.onpointerup=()=>{const m=d&&d.m;d=null;if(!m)setFold(false)};
+  // 10 s sans toucher la fenêtre = elle se referme en bulle
+  ["mousemove","mousedown","keydown","touchstart","focusin","input"].forEach(ev=>document.addEventListener(ev,()=>{last=Date.now()},true));
+  setInterval(()=>{if(!live())last=Date.now();else if(Date.now()-last>=10000)setFold(true)},1000);
 }}catch(e){console.error(e)}
 window.addEventListener("error",e=>{if(["auth","agent","admin"].every(i=>$(i).hidden)){show("auth");$("err").textContent="Erreur : "+e.message}});
 setTimeout(()=>{if(["auth","agent","admin"].every(i=>$(i).hidden)){show("auth");$("err").textContent="Chargement trop long : vérifiez la connexion internet."}},6000);
