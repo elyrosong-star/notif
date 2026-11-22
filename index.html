@@ -74,7 +74,7 @@ body.folded .top{margin:0}
 <section id="agent" hidden>
   <div class="top">
     <div><b id="aWho"></b><br><span id="aModel" class="tag m"></span></div>
-    <div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost pinb hf" hidden>Épinglé</button> <button class="ghost hf" id="aOut">Quitter</button></div>
+    <div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="aOut">Quitter</button></div>
   </div>
   <label for="fan">Fan en discussion</label>
   <input id="fan" placeholder="Nom du fan…" autocomplete="off">
@@ -85,7 +85,7 @@ body.folded .top{margin:0}
 
 <!-- ESPACE ADMIN -->
 <section id="admin" hidden>
-  <div class="top"><b>Espace admin · <span id="adWho"></span></b><span id="topN" class="badge"></span><div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost pinb hf" hidden>Épinglé</button> <button class="ghost hf" id="sizeb" hidden>Agrandir</button> <button class="ghost hf" id="adOut">Se déconnecter</button></div></div>
+  <div class="top"><b>Espace admin · <span id="adWho"></span></b><span id="topN" class="badge"></span><div><button class="ghost foldb" hidden>Réduire</button> <button class="ghost hf" id="sizeb" hidden>Agrandir</button> <button class="ghost hf" id="adOut">Se déconnecter</button></div></div>
   <nav>
     <button data-t="notif">Notifications<span id="bN" class="badge"></span></button>
     <button data-t="agents">Agents</button>
@@ -127,7 +127,18 @@ let fType="all",tab="notif";
 
 function show(n){["auth","agent","admin"].forEach(i=>$(i).hidden=i!==n);document.body.className=n}
 function toast(t){const d=el("div","toast",t);document.body.appendChild(d);setTimeout(()=>d.remove(),2200)}
-function beep(type){try{ac=ac||new AudioContext();(type==="pressing"?[880,1175,880]:[784,988]).forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain(),s=ac.currentTime+i*.16;o.frequency.value=f;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(.25,s);g.gain.exponentialRampToValueAtTime(.001,s+.14);o.start(s);o.stop(s+.15)})}catch(e){}}
+let lastUn=-1;
+function iconURL(n,base){ // icône à pastille rouge (onglet du navigateur ou barre des tâches)
+  const S=64,c=document.createElement("canvas");c.width=c.height=S;const x=c.getContext("2d");
+  x.textAlign="center";x.textBaseline="middle";
+  if(base){x.fillStyle="#4f46e5";x.beginPath();x.roundRect(0,0,S,S,14);x.fill();x.fillStyle="#fff";x.font="bold 36px Segoe UI,sans-serif";x.fillText("A",S/2,S/2+2)}
+  if(n){const r=base?22:30,cx=base?S-r:S/2,cy=base?r:S/2,fs=(base?1:1.5)*(n>99?16:n>9?22:28);
+    x.fillStyle="#e11d48";x.beginPath();x.arc(cx,cy,r,0,7);x.fill();
+    x.fillStyle="#fff";x.font="bold "+fs+"px Segoe UI,sans-serif";x.fillText(n>99?"99+":String(n),cx,cy+2)}
+  return c.toDataURL("image/png");
+}
+function setFavicon(n){let l=document.querySelector("link[rel=icon]");if(!l){l=document.createElement("link");l.rel="icon";document.head.appendChild(l)}l.href=iconURL(n,true)}
+function beep(type){try{ac=ac||new AudioContext();ac.resume();(type==="pressing"?[880,1175,880]:[784,988]).forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain(),s=ac.currentTime+i*.16;o.frequency.value=f;o.connect(g);g.connect(ac.destination);g.gain.setValueAtTime(.25,s);g.gain.exponentialRampToValueAtTime(.001,s+.14);o.start(s);o.stop(s+.15)})}catch(e){}}
 
 /* ---------- Connexion ---------- */
 let signup=false;
@@ -142,7 +153,7 @@ $("auth").onsubmit=async e=>{
 };
 async function logout(){cleanup();await db.auth.signOut();route()}
 $("aOut").onclick=$("adOut").onclick=logout;
-function cleanup(){clearInterval(timer);if(ch){db.removeChannel(ch);ch=null}window.native&&window.native.unread(0);document.title="Alertes"}
+function cleanup(){clearInterval(timer);if(ch){db.removeChannel(ch);ch=null}lastUn=-1;setFavicon(0);window.native&&window.native.unread(0);document.title="Alertes"}
 
 async function route(){
   const{data:{session}}=await db.auth.getSession();
@@ -182,9 +193,11 @@ $("bT").onclick=()=>send("teasing");$("bP").onclick=()=>send("pressing");
 /* ---------- Admin ---------- */
 async function startAdmin(){
   show("admin");nat("admin");$("adWho").textContent=me.nom;
+  document.addEventListener("click",()=>{try{ac=ac||new AudioContext();ac.resume()}catch(e){}if(window.Notification&&Notification.permission==="default")Notification.requestPermission()},{once:true});
   await loadAll();setTab(tab);
   ch=db.channel("tp").on("postgres_changes",{event:"*",schema:"public",table:"tp_alertes"},p=>{
-    if(p.eventType==="INSERT"){beep(p.new.type);toast(LBL[p.new.type]+" · "+p.new.agent_nom+" → "+p.new.fan)}
+    if(p.eventType==="INSERT"){beep(p.new.type);toast(LBL[p.new.type]+" · "+p.new.agent_nom+" → "+p.new.fan);
+      if(window.Notification&&Notification.permission==="granted"){try{new Notification(LBL[p.new.type]+" · "+p.new.agent_nom,{body:"Fan : "+p.new.fan+(p.new.modele_nom?" · "+p.new.modele_nom:"")})}catch(e){}}}
     loadAlertes();
   }).subscribe();
   timer=setInterval(loadAll,30000);
@@ -213,7 +226,7 @@ function render(){
   if($("admin").hidden)return;
   const un=alertes.filter(a=>!a.lu).length;
   $("bN").textContent=un||"";$("topN").textContent=un||"";document.title=un?`(${un}) Alertes`:"Alertes";
-  window.native&&window.native.unread(un);
+  if(un!==lastUn){lastUn=un;setFavicon(un);window.native&&window.native.unread(un,iconURL(un,false))}
   if(tab==="notif")renderNotifs();else if(tab==="agents")renderAgents();else renderModeles();
 }
 function renderNotifs(){
@@ -276,7 +289,6 @@ $("fan").onkeydown=e=>{if(e.key==="Enter")e.preventDefault()};
 
 try{if(window.native){
   document.querySelectorAll(".foldb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const f=await window.native.fold();document.body.classList.toggle("folded",f);document.querySelectorAll(".foldb").forEach(x=>x.textContent=f?"Déplier":"Réduire")}});
-  document.querySelectorAll(".pinb").forEach(b=>{b.hidden=false;b.onclick=async()=>{const on=await window.native.pin();document.querySelectorAll(".pinb").forEach(x=>x.textContent=on?"Épinglé":"Épingler")}});
   let big=false;$("sizeb").hidden=false;$("sizeb").onclick=()=>{big=!big;$("sizeb").textContent=big?"Réduire":"Agrandir";window.native.size()};
 }}catch(e){console.error(e)}
 window.addEventListener("error",e=>{if(["auth","agent","admin"].every(i=>$(i).hidden)){show("auth");$("err").textContent="Erreur : "+e.message}});
